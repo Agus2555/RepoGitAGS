@@ -11,7 +11,7 @@
 | :--- | :--- |
 | **Espacio Curricular** | Laboratorio de Programación Orientada a Objetos & Bases de Datos |
 | **Plan Troncal** | Código en combate (Software 2.3) |
-| **Ubicación Temporal** | 2.º Bimestre |
+| **Ubicación Temporal** | 3.º Bimestre |
 | **Duración** | 1 Bimestre |
 | **Estado** | En proceso / Desarrollo Académico |
 
