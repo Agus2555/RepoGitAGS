@@ -1,0 +1,57 @@
+using System.Data;
+using Dapper;
+using MySqlConnector;
+
+namespace Persistencia.Repositorios;
+
+public class BatallaRepository
+{
+    private readonly string _connectionString;
+
+    public BatallaRepository(string connectionString)
+    {
+        _connectionString = connectionString;
+    }
+
+    private IDbConnection CrearConexion() => new MySqlConnection(_connectionString);
+
+    // Registra la batalla y recupera el ID generado por el parámetro OUT del SP
+    public async Task<int> RegistrarBatallaAsync(int personaje1Id, int personaje2Id)
+    {
+        using var db = CrearConexion();
+        var parametros = new DynamicParameters();
+        parametros.Add("p_Personaje1_Id", personaje1Id);
+        parametros.Add("p_Personaje2_Id", personaje2Id);
+        parametros.Add("p_BatallaId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+
+        await db.ExecuteAsync("sp_RegistrarBatalla", parametros, commandType: CommandType.StoredProcedure);
+
+        return parametros.Get<int>("p_BatallaId");
+    }
+
+    // Registra cada impacto/turno dentro del detalle transaccional
+    public async Task RegistrarTurnoAsync(int batallaId, int turno, int atacanteId, int defensorId, int danio, string? habilidadUsada)
+    {
+        using var db = CrearConexion();
+        var parametros = new DynamicParameters();
+        parametros.Add("p_BatallaId", batallaId);
+        parametros.Add("p_Turno", turno);
+        parametros.Add("p_AtacanteId", atacanteId);
+        parametros.Add("p_DefensorId", defensorId);
+        parametros.Add("p_DanioRealizado", danio);
+        parametros.Add("p_HabilidadUsada", habilidadUsada);
+
+        await db.ExecuteAsync("sp_RegistrarTurno", parametros, commandType: CommandType.StoredProcedure);
+    }
+
+    // Finaliza la batalla asignando al ganador
+    public async Task FinalizarBatallaAsync(int batallaId, int ganadorId)
+    {
+        using var db = CrearConexion();
+        var parametros = new DynamicParameters();
+        parametros.Add("p_BatallaId", batallaId);
+        parametros.Add("p_GanadorId", ganadorId);
+
+        await db.ExecuteAsync("sp_FinalizarBatalla", parametros, commandType: CommandType.StoredProcedure);
+    }
+}
