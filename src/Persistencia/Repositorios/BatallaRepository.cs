@@ -3,7 +3,6 @@ using Dapper;
 using MySqlConnector;
 
 namespace Persistencia.Repositorios;
-
 public class BatallaRepository
 {
     private readonly string _connectionString;
