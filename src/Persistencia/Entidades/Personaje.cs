@@ -44,14 +44,17 @@ namespace Persistencia.Entidades
         public virtual void RecibirDanio(int danioRecibido)
         {
             int danioReal = danioRecibido - Defensa;
-            
-            if (danioReal > 0)
+    
+            // Si la defensa supera al ataque, inflige al menos 1 de daño
+             if (danioReal <= 0) 
             {
-                Vida -= danioReal;
-                if (Vida < 0) 
-                {
-                    Vida = 0; // Regla Actividad 6: Vida dentro de los límites permitidos (no negativa)
-                }
+            danioReal = 1;
+            }
+
+            Vida -= danioReal;
+            if (Vida < 0) 
+            {
+                Vida = 0;
             }
         }
     }
