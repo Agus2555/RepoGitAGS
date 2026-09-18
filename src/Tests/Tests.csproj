@@ -22,4 +22,8 @@
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Persistencia\Persistencia.csproj" />
+  </ItemGroup>
+
 </Project>
