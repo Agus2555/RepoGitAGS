@@ -1,9 +1,11 @@
 using System.Data;
+using System.Threading.Tasks;
 using Dapper;
 using MySqlConnector;
 
 namespace Persistencia.Repositorios;
-public class BatallaRepository
+
+public class BatallaRepository : IBatallaRepository
 {
     private readonly string _connectionString;
 
@@ -14,7 +16,6 @@ public class BatallaRepository
 
     private IDbConnection CrearConexion() => new MySqlConnection(_connectionString);
 
-    // Registra la batalla y recupera el ID generado por el parámetro OUT del SP
     public async Task<int> RegistrarBatallaAsync(int personaje1Id, int personaje2Id)
     {
         using var db = CrearConexion();
@@ -28,7 +29,6 @@ public class BatallaRepository
         return parametros.Get<int>("p_BatallaId");
     }
 
-    // Registra cada impacto/turno dentro del detalle transaccional
     public async Task RegistrarTurnoAsync(int batallaId, int turno, int atacanteId, int defensorId, int danio, string? habilidadUsada)
     {
         using var db = CrearConexion();
@@ -43,7 +43,6 @@ public class BatallaRepository
         await db.ExecuteAsync("sp_RegistrarTurno", parametros, commandType: CommandType.StoredProcedure);
     }
 
-    // Finaliza la batalla asignando al ganador
     public async Task FinalizarBatallaAsync(int batallaId, int ganadorId)
     {
         using var db = CrearConexion();
