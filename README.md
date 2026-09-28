@@ -53,7 +53,7 @@ El objetivo central del proyecto es poner en práctica el **polimorfismo dinámi
 * **Persistencia C#:** Integración de **Dapper** para mapeo de datos y ejecución transaccional.
 * **Gestión de Usuarios y Seguridad:**
   * **Usuario Administrador:** Acceso completo para tareas de mantenimiento y migración.
-  * **Usuario Desarrollo:** Acceso restringido exclusivamente al esquema del proyecto (`db_combatCode`).
+  * **Usuario Desarrollo:** Acceso restringido exclusivamente al esquema del proyecto (`simulador_combate`).
 
 ---
 
@@ -71,14 +71,19 @@ combatCode/
 ├── src/
 │   ├── Aplicacion/             # Lógica de negocio, servicios y contratos
 │   │   ├── Interfaces/
+│   │   ├── Modelos/            # ResultadoCombate.cs, TurnoCombate.cs
 │   │   ├── Servicios/
+│   │   ├── appsettings.json
+│   │   ├── Program.cs
 │   │   └── Aplicacion.csproj
 │   ├── Persistencia/           # Mapeo, repositorios y conexión a BD (Dapper)
 │   │   ├── Entidades/
 │   │   ├── Repositorios/
 │   │   └── Persistencia.csproj
-│   └── Test/                   # Pruebas unitarias
-│       └── Test.csproj
+│   └── Tests/                  # Pruebas unitarias
+│       ├── ServicioATests.cs
+│       ├── ServicioBTests.cs
+│       └── Tests.csproj
 └── Proyecto.sln                # Archivo de solución .NET
 ```
 
