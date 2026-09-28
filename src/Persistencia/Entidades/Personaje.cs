@@ -4,17 +4,23 @@ namespace Persistencia.Entidades
 {
     public abstract class Personaje
     {
-        // Propiedades encapsuladas: se pueden leer desde afuera, pero solo se modifican internamente
-        public int Id { get; private set; }
+        // Id es internal set para que solo los repositorios (mismo assembly) lo asignen al leer la BD.
+        public int Id { get; internal set; }
         public string Nombre { get; private set; }
         public int Vida { get; private set; }
+        public int VidaMaxima { get; private set; }
         public int Ataque { get; private set; }
         public int Defensa { get; private set; }
-        
-        // Propiedad calculada: devuelve false si la vida llega a 0
+
         public bool EstaVivo => Vida > 0;
 
-        // Constructor con las reglas de la Actividad 6
+        // Recurso específico de cada clase (Furia, Maná, Flechas, Energía).
+        // abstract obliga a cada subclase a exponerlo con su nombre propio.
+        public abstract int Recurso { get; }
+
+        // Nombre de la habilidad especial, para mostrar en el historial de turnos.
+        public virtual string NombreHabilidad => "Sin Habilidad";
+
         protected Personaje(string nombre, int vidaInicial, int ataque, int defensa)
         {
             if (string.IsNullOrWhiteSpace(nombre)) throw new ArgumentException("El nombre no puede estar vacío.");
@@ -23,39 +29,53 @@ namespace Persistencia.Entidades
 
             Nombre = nombre;
             Vida = vidaInicial;
+            VidaMaxima = vidaInicial;
             Ataque = ataque;
             Defensa = defensa;
         }
 
-        // Método común para validar que un personaje muerto no haga acciones (Actividad 6)
+        // Solo los repositorios (Persistencia) deben poder asignar el Id luego del INSERT.
+        internal void AsignarId(int id) => Id = id;
+
         protected void ValidarEstado()
         {
             if (!EstaVivo)
-            {
                 throw new InvalidOperationException($"{Nombre} está derrotado y no puede realizar acciones.");
-            }
         }
 
-        // La solución a la Actividad 5: Métodos abstractos. 
-        // Cada clase hija estará obligada a programar su propia forma de atacar.
-        public abstract void Atacar(Personaje objetivo);
+        // Devuelve el daño efectivamente infligido (para que ServicioCombate lo registre).
+        public abstract int Atacar(Personaje objetivo);
 
-        // Método que encapsula el comportamiento de recibir daño para que la vida nunca sea negativa
-        public virtual void RecibirDanio(int danioRecibido)
+        // Comportamiento defensivo propio de cada clase; devuelve 0 (sin daño).
+        // virtual → cada subclase lo personaliza; si no lo hace, no pasa nada.
+        public virtual int Defender()
+        {
+            ValidarEstado();
+            return 0;
+        }
+
+        // Habilidad especial con costo de recurso; devuelve daño o 0 si no hay recurso.
+        public virtual int UsarHabilidad(Personaje objetivo)
+        {
+            ValidarEstado();
+            return 0;
+        }
+
+        // Encapsula el daño recibido y garantiza que la vida nunca sea negativa.
+        // Devuelve el daño real aplicado (lo que se resta de la vida).
+        public virtual int RecibirDanio(int danioRecibido)
         {
             int danioReal = danioRecibido - Defensa;
-    
-            // Si la defensa supera al ataque, inflige al menos 1 de daño
-             if (danioReal <= 0) 
-            {
-            danioReal = 1;
-            }
 
-            Vida -= danioReal;
-            if (Vida < 0) 
-            {
-                Vida = 0;
-            }
+            // La defensa nunca anula por completo: mínimo 1 punto de daño.
+            if (danioReal <= 0)
+                danioReal = 1;
+
+            // Aplicar solo lo que queda de vida para no ir a negativo.
+            int danioAplicado = Math.Min(danioReal, Vida);
+            Vida -= danioAplicado;
+
+            return danioAplicado;
         }
     }
 }

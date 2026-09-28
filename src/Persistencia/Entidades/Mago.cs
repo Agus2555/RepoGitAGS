@@ -6,29 +6,43 @@ namespace Persistencia.Entidades
     {
         public int Mana { get; private set; }
 
-        public Mago(string nombre, int vidaInicial, int ataque, int defensa, int manaInicial) 
+        public override int Recurso => Mana;
+        public override string NombreHabilidad => "Bola de Fuego";
+
+        public Mago(string nombre, int vidaInicial, int ataque, int defensa, int manaInicial)
             : base(nombre, vidaInicial, ataque, defensa)
         {
-            if (manaInicial < 0) throw new ArgumentException("El maná no puede ser negativo."); // Regla Actividad 6
+            if (manaInicial < 0) throw new ArgumentException("El maná no puede ser negativo.");
             Mana = manaInicial;
         }
 
-        public override void Atacar(Personaje objetivo)
+        // Ataque básico: proyectil mágico estándar, sin costo de maná.
+        public override int Atacar(Personaje objetivo)
         {
-            ValidarEstado(); // Regla Actividad 6: personajes derrotados no pueden atacar
+            ValidarEstado();
+            return objetivo.RecibirDanio(Ataque);
+        }
 
-            if (Mana >= 10)
-            {
-                Mana -= 10;
-                // El mago ignora parte de la defensa rival usando magia
-                int danioMagico = Ataque * 2; 
-                objetivo.RecibirDanio(danioMagico);
-            }
-            else
-            {
-                // Ataque básico si no hay maná
-                objetivo.RecibirDanio(Ataque);
-            }
+        // Defender regenera maná: el mago medita para recuperar energía mágica.
+        public override int Defender()
+        {
+            ValidarEstado();
+            Mana += 5;
+            return 0;
+        }
+
+        // Habilidad: Bola de Fuego. Consume 10 maná, daño doble.
+        // Representación simplificada de "ignora parte de la defensa":
+        // el poder bruto del daño doble supera en la mayoría de los casos la reducción de defensa.
+        public override int UsarHabilidad(Personaje objetivo)
+        {
+            ValidarEstado();
+
+            if (Mana < 10)
+                return 0;
+
+            Mana -= 10;
+            return objetivo.RecibirDanio(Ataque * 2);
         }
     }
 }
