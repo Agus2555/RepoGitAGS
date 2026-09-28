@@ -4,7 +4,6 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -23,7 +22,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Persistencia: entidades y TipoAccion -->
     <ProjectReference Include="..\Persistencia\Persistencia.csproj" />
+    <!-- Aplicacion: ServicioCombate, interfaces, modelos -->
+    <ProjectReference Include="..\Aplicacion\Aplicacion.csproj" />
   </ItemGroup>
 
 </Project>
