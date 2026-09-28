@@ -2,85 +2,175 @@ USE simulador_combate;
 
 DELIMITER //
 
--- Cantidad de batallas por tipo de personaje
-DROP PROCEDURE IF EXISTS sp_CantidadBatallasPorTipoPersonaje //
-CREATE PROCEDURE sp_CantidadBatallasPorTipoPersonaje()
+-- ─────────────────────────────────────────────────────────────────────────────
+-- CRITERIO GENERAL
+-- Las consultas simples (listar batallas de un período, buscar por id) van en
+-- los repositorios con Dapper. Estos SP se justifican porque requieren
+-- agregaciones, relaciones entre varias tablas o lógica adicional.
+-- Todos usan START TRANSACTION READ ONLY ... COMMIT como exige la consigna.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- ── 1. Resumen de batallas por período y tipo de personaje ──────────────────
+DROP PROCEDURE IF EXISTS sp_ResumenBatallasPorPeriodo //
+CREATE PROCEDURE sp_ResumenBatallasPorPeriodo(
+    IN p_FechaInicio DATETIME,
+    IN p_FechaFin    DATETIME
+)
 BEGIN
-    SELECT 
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION READ ONLY;
+
+    SELECT
         p.TipoClase,
-        COUNT(b.Id) AS TotalBatallas
+        COUNT(DISTINCT b.Id)                                               AS TotalBatallas,
+        SUM(CASE WHEN pb.Resultado = 'Victoria' THEN 1 ELSE 0 END)        AS Victorias,
+        SUM(CASE WHEN pb.Resultado = 'Derrota'  THEN 1 ELSE 0 END)        AS Derrotas,
+        SUM(CASE WHEN pb.Resultado = 'Empate'   THEN 1 ELSE 0 END)        AS Empates
     FROM Personajes p
-    INNER JOIN Batallas b ON p.Id = b.Personaje1_Id OR p.Id = b.Personaje2_Id
-    GROUP BY p.TipoClase;
+    INNER JOIN ParticipantesBatalla pb ON p.Id = pb.PersonajeId
+    INNER JOIN Batallas b              ON pb.BatallaId = b.Id
+    WHERE b.Finalizada = TRUE
+      AND b.Fecha BETWEEN p_FechaInicio AND p_FechaFin
+    GROUP BY p.TipoClase
+    ORDER BY TotalBatallas DESC;
+
+    COMMIT;
 END //
 
--- Victorias y derrotas por personaje
-DROP PROCEDURE IF EXISTS sp_RankingVictoriasYDerrotas //
-CREATE PROCEDURE sp_RankingVictoriasYDerrotas()
+-- ── 2. Victorias y derrotas agrupadas por tipo de personaje y período ───────
+DROP PROCEDURE IF EXISTS sp_VictoriasPorTipoYPeriodo //
+CREATE PROCEDURE sp_VictoriasPorTipoYPeriodo(
+    IN p_FechaInicio DATETIME,
+    IN p_FechaFin    DATETIME
+)
 BEGIN
-    SELECT 
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION READ ONLY;
+
+    SELECT
+        p.TipoClase,
+        SUM(CASE WHEN pb.Resultado = 'Victoria' THEN 1 ELSE 0 END)        AS Victorias,
+        SUM(CASE WHEN pb.Resultado = 'Derrota'  THEN 1 ELSE 0 END)        AS Derrotas,
+        SUM(CASE WHEN pb.Resultado = 'Empate'   THEN 1 ELSE 0 END)        AS Empates,
+        COUNT(*)                                                            AS TotalBatallas
+    FROM Personajes p
+    INNER JOIN ParticipantesBatalla pb ON p.Id = pb.PersonajeId
+    INNER JOIN Batallas b              ON pb.BatallaId = b.Id
+    WHERE b.Finalizada = TRUE
+      AND b.Fecha BETWEEN p_FechaInicio AND p_FechaFin
+    GROUP BY p.TipoClase
+    ORDER BY Victorias DESC;
+
+    COMMIT;
+END //
+
+-- ── 3. Ranking de personajes según victorias y porcentaje de efectividad ────
+DROP PROCEDURE IF EXISTS sp_RankingPersonajes //
+CREATE PROCEDURE sp_RankingPersonajes()
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION READ ONLY;
+
+    SELECT
         p.Id,
         p.Nombre,
         p.TipoClase,
-        SUM(CASE WHEN b.Ganador_Id = p.Id THEN 1 ELSE 0 END) AS Victorias,
-        SUM(CASE WHEN b.Ganador_Id IS NOT NULL AND b.Ganador_Id != p.Id THEN 1 ELSE 0 END) AS Derrotas
+        COUNT(pb.BatallaId)                                                AS TotalBatallas,
+        SUM(CASE WHEN pb.Resultado = 'Victoria' THEN 1 ELSE 0 END)        AS Victorias,
+        SUM(CASE WHEN pb.Resultado = 'Derrota'  THEN 1 ELSE 0 END)        AS Derrotas,
+        ROUND(
+            CASE
+                WHEN COUNT(pb.BatallaId) > 0
+                THEN SUM(CASE WHEN pb.Resultado = 'Victoria' THEN 1 ELSE 0 END) * 100.0
+                     / COUNT(pb.BatallaId)
+                ELSE 0
+            END, 2
+        )                                                                   AS PorcentajeEfectividad
     FROM Personajes p
-    LEFT JOIN Batallas b ON (p.Id = b.Personaje1_Id OR p.Id = b.Personaje2_Id) AND b.Finalizada = TRUE
+    LEFT JOIN ParticipantesBatalla pb ON p.Id = pb.PersonajeId
     GROUP BY p.Id, p.Nombre, p.TipoClase
-    ORDER BY Victorias DESC;
+    ORDER BY PorcentajeEfectividad DESC, Victorias DESC;
+
+    COMMIT;
 END //
 
--- Daño promedio por clase de personaje y por combate
-DROP PROCEDURE IF EXISTS sp_DanioPromedioPorClase //
-CREATE PROCEDURE sp_DanioPromedioPorClase()
+-- ── 4. Daño promedio por clase de personaje y tipo de acción ────────────────
+DROP PROCEDURE IF EXISTS sp_DanioPromedioPorClaseYAccion //
+CREATE PROCEDURE sp_DanioPromedioPorClaseYAccion()
 BEGIN
-    SELECT 
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION READ ONLY;
+
+    SELECT
         p.TipoClase,
-        AVG(db.DanioRealizado) AS DanioPromedioPorTurno
+        db.Accion,
+        ROUND(AVG(db.DanioRealizado), 2)    AS DanioPromedio,
+        COUNT(*)                             AS VecesUsada
     FROM DetalleBatalla db
     INNER JOIN Personajes p ON db.AtacanteId = p.Id
-    GROUP BY p.TipoClase;
+    WHERE db.DanioRealizado > 0
+    GROUP BY p.TipoClase, db.Accion
+    ORDER BY p.TipoClase, DanioPromedio DESC;
+
+    COMMIT;
 END //
 
--- Daño total realizado y recibido por personaje en un período
+-- ── 5. Daño total realizado y recibido por personaje en un período ───────────
+-- Bug corregido respecto al script original:
+-- el producto cartesiano (doble LEFT JOIN a DetalleBatalla) inflaba las sumas.
+-- La solución usa ParticipantesBatalla, que ya acumula los totales por batalla.
 DROP PROCEDURE IF EXISTS sp_DanioPorPersonajeEnPeriodo //
 CREATE PROCEDURE sp_DanioPorPersonajeEnPeriodo(
     IN p_FechaInicio DATETIME,
-    IN p_FechaFin DATETIME
+    IN p_FechaFin    DATETIME
 )
 BEGIN
-    SELECT 
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION READ ONLY;
+
+    -- LEFT JOIN para incluir personajes sin batallas en el período (con 0).
+    -- El filtro de fecha va en la condición del JOIN (no en WHERE),
+    -- para que los personajes sin batallas en el período aparezcan con 0.
+    SELECT
         p.Id,
         p.Nombre,
-        COALESCE(SUM(db_atq.DanioRealizado), 0) AS DanioTotalRealizado,
-        COALESCE(SUM(db_def.DanioRealizado), 0) AS DanioTotalRecibido
+        p.TipoClase,
+        COALESCE(SUM(pb.DanioRealizado), 0)  AS DanioTotalRealizado,
+        COALESCE(SUM(pb.DanioRecibido),  0)  AS DanioTotalRecibido
     FROM Personajes p
-    LEFT JOIN DetalleBatalla db_atq ON p.Id = db_atq.AtacanteId
-    LEFT JOIN Batallas b_atq ON db_atq.BatallaId = b_atq.Id AND b_atq.Fecha BETWEEN p_FechaInicio AND p_FechaFin
-    LEFT JOIN DetalleBatalla db_def ON p.Id = db_def.DefensorId
-    LEFT JOIN Batallas b_def ON db_def.BatallaId = b_def.Id AND b_def.Fecha BETWEEN p_FechaInicio AND p_FechaFin
-    GROUP BY p.Id, p.Nombre;
-END //
+    LEFT JOIN ParticipantesBatalla pb ON p.Id = pb.PersonajeId
+    LEFT JOIN Batallas b              ON pb.BatallaId = b.Id
+        AND b.Finalizada = TRUE
+        AND b.Fecha BETWEEN p_FechaInicio AND p_FechaFin
+    GROUP BY p.Id, p.Nombre, p.TipoClase
+    ORDER BY DanioTotalRealizado DESC;
 
--- Batallas realizadas por período
-DROP PROCEDURE IF EXISTS sp_BatallasPorPeriodo //
-CREATE PROCEDURE sp_BatallasPorPeriodo(
-    IN p_FechaInicio DATETIME,
-    IN p_FechaFin DATETIME
-)
-BEGIN
-    SELECT 
-        b.Id,
-        p1.Nombre AS Personaje1,
-        p2.Nombre AS Personaje2,
-        pg.Nombre AS Ganador,
-        b.Fecha,
-        b.Finalizada
-    FROM Batallas b
-    INNER JOIN Personajes p1 ON b.Personaje1_Id = p1.Id
-    INNER JOIN Personajes p2 ON b.Personaje2_Id = p2.Id
-    LEFT JOIN Personajes pg ON b.Ganador_Id = pg.Id
-    WHERE b.Fecha BETWEEN p_FechaInicio AND p_FechaFin;
+    COMMIT;
 END //
 
 DELIMITER ;
