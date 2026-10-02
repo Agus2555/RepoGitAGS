@@ -215,4 +215,351 @@ public class ServicioCombateAccionesTests
         Assert.True(danos.Distinct().Count() > 1,
             "Se espera que las cuatro clases produzcan al menos dos valores de daño distintos (polimorfismo).");
     }
+
+    // ── Guerrero (casos adicionales) ─────────────────────────────────────────
+
+    [Fact]
+    public void Guerrero_AtaqueBasicoSinFuria_HaceAtaqueMenosDefensa()
+    {
+        var guerrero = new Guerrero("G", 100, 20, 5, furiaInicial: 0);
+        var objetivo = new Guerrero("E", 500, 5, 2, furiaInicial: 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(guerrero, objetivo, 1);
+
+        Assert.Equal(18, turno.Danio);          // 20 - 2
+        Assert.Equal(482, objetivo.Vida);
+        Assert.Equal("Ataque Básico", turno.NombreAccion);
+    }
+
+    [Fact]
+    public void Guerrero_AtaqueBasicoConFuria_ConsumeFuriaYSumaQuinceDeDanio()
+    {
+        var guerrero = new Guerrero("G", 100, 20, 5, furiaInicial: 20);
+        var objetivo = new Guerrero("E", 500, 5, 2, furiaInicial: 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(guerrero, objetivo, 1);
+
+        Assert.Equal(33, turno.Danio);          // (20 + 15) - 2
+        Assert.Equal(0, guerrero.Furia);
+    }
+
+    [Fact]
+    public void Guerrero_GolpeDevastador_HaceUnoPuntoCincoVecesElAtaque()
+    {
+        var guerrero = new Guerrero("G", 100, 20, 5, furiaInicial: 25);
+        var objetivo = new Guerrero("E", 500, 5, 1, furiaInicial: 0);
+
+        var turno = ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(guerrero, objetivo, 1);
+
+        Assert.Equal(29, turno.Danio);          // (20 + 10) - 1
+        Assert.Equal(5, guerrero.Furia);        // 25 - 20
+    }
+
+    [Fact]
+    public void Guerrero_HabilidadSinFuria_NoConsumeFuriaNiDaniaAlObjetivo()
+    {
+        var guerrero = new Guerrero("G", 100, 20, 5, furiaInicial: 19);
+        var objetivo = new Guerrero("E", 100, 5, 2, furiaInicial: 0);
+
+        ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(guerrero, objetivo, 1);
+
+        Assert.Equal(19, guerrero.Furia);
+        Assert.Equal(100, objetivo.Vida);
+    }
+
+    [Fact]
+    public void Guerrero_AlDefender_AcumulaCincoDeFuriaYNoHaceDanio()
+    {
+        var guerrero = new Guerrero("G", 100, 20, 5, furiaInicial: 0);
+        var objetivo = new Guerrero("E", 100, 5, 2, furiaInicial: 0);
+
+        var turno = ConEstrategia(new EstrategiaDefender()).EjecutarTurno(guerrero, objetivo, 1);
+
+        Assert.Equal(5, guerrero.Furia);
+        Assert.Equal(0, turno.Danio);
+        Assert.Equal("Defensa", turno.NombreAccion);
+        Assert.Equal(100, objetivo.Vida);
+    }
+
+    // ── Mago (casos adicionales) ─────────────────────────────────────────────
+
+    [Fact]
+    public void Mago_BolaDeFuego_ConsumeDiezDeManaYHaceDanioDoble()
+    {
+        var mago     = new Mago("M", 80, 20, 5, manaInicial: 50);
+        var objetivo = new Guerrero("E", 500, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(mago, objetivo, 1);
+
+        Assert.Equal(39, turno.Danio);          // (20 * 2) - 1
+        Assert.Equal(40, mago.Mana);
+    }
+
+    [Fact]
+    public void Mago_ConManaInsuficiente_NoConsumeMana()
+    {
+        var mago     = new Mago("M", 80, 20, 5, manaInicial: 9);
+        var objetivo = new Guerrero("E", 100, 5, 2, 0);
+
+        var turno = ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(mago, objetivo, 1);
+
+        Assert.Equal(0, turno.Danio);
+        Assert.Equal(9, mago.Mana);
+        Assert.Equal(100, objetivo.Vida);
+    }
+
+    [Fact]
+    public void Mago_AtaqueBasico_NoConsumeMana()
+    {
+        var mago     = new Mago("M", 80, 20, 5, manaInicial: 30);
+        var objetivo = new Guerrero("E", 500, 5, 2, 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(mago, objetivo, 1);
+
+        Assert.Equal(18, turno.Danio);          // 20 - 2
+        Assert.Equal(30, mago.Mana);
+    }
+
+    [Fact]
+    public void Mago_AlDefender_RegeneraExactamenteCincoDeMana()
+    {
+        var mago  = new Mago("M", 80, 20, 5, manaInicial: 3);
+        var dummy = new Guerrero("D", 100, 5, 2, 0);
+
+        ConEstrategia(new EstrategiaDefender()).EjecutarTurno(mago, dummy, 1);
+
+        Assert.Equal(8, mago.Mana);
+    }
+
+    // ── Arquero (casos adicionales) ──────────────────────────────────────────
+
+    [Fact]
+    public void Arquero_ConFlechas_ConsumeUnaYSumaDiezDeDanio()
+    {
+        var arquero  = new Arquero("A", 90, 20, 5, flechasIniciales: 5);
+        var objetivo = new Guerrero("E", 500, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(arquero, objetivo, 1);
+
+        Assert.Equal(29, turno.Danio);          // (20 + 10) - 1
+        Assert.Equal(4, arquero.Flechas);
+    }
+
+    [Fact]
+    public void Arquero_SinFlechas_HaceLaMitadDelAtaque()
+    {
+        var arquero  = new Arquero("A", 90, 20, 5, flechasIniciales: 0);
+        var objetivo = new Guerrero("E", 500, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(arquero, objetivo, 1);
+
+        Assert.Equal(9, turno.Danio);           // (20 / 2) - 1
+        Assert.Equal(0, arquero.Flechas);
+    }
+
+    [Fact]
+    public void Arquero_LluviaDeFlechas_ConsumeTresFlechasYHaceDanioDoble()
+    {
+        var arquero  = new Arquero("A", 90, 20, 5, flechasIniciales: 3);
+        var objetivo = new Guerrero("E", 500, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(arquero, objetivo, 1);
+
+        Assert.Equal(39, turno.Danio);          // (20 * 2) - 1
+        Assert.Equal(0, arquero.Flechas);
+        Assert.Equal("Lluvia de Flechas", turno.NombreAccion);
+    }
+
+    [Fact]
+    public void Arquero_ConMenosDeTresFlechas_HabilidadFalla()
+    {
+        var arquero  = new Arquero("A", 90, 20, 5, flechasIniciales: 2);
+        var objetivo = new Guerrero("E", 100, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(arquero, objetivo, 1);
+
+        Assert.Equal(0, turno.Danio);
+        Assert.Equal(2, arquero.Flechas);
+        Assert.Equal(100, objetivo.Vida);
+    }
+
+    // ── Asesino (casos adicionales) ──────────────────────────────────────────
+
+    [Fact]
+    public void Asesino_AtaqueConEnergia_ConsumeQuinceYHaceDanioTriple()
+    {
+        var asesino  = new Asesino("As", 90, 20, 5, energiaInicial: 15);
+        var objetivo = new Guerrero("E", 500, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(asesino, objetivo, 1);
+
+        Assert.Equal(59, turno.Danio);          // (20 * 3) - 1
+        Assert.Equal(0, asesino.Energia);
+    }
+
+    [Fact]
+    public void Asesino_AtaqueSinEnergia_RecuperaCincoYHaceDanioNormal()
+    {
+        var asesino  = new Asesino("As", 90, 20, 5, energiaInicial: 0);
+        var objetivo = new Guerrero("E", 500, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(asesino, objetivo, 1);
+
+        Assert.Equal(19, turno.Danio);          // 20 - 1
+        Assert.Equal(5, asesino.Energia);
+    }
+
+    [Fact]
+    public void Asesino_PunaladaLetal_ConsumeEnergiaYHaceDanioTriple()
+    {
+        var asesino  = new Asesino("As", 90, 20, 5, energiaInicial: 20);
+        var objetivo = new Guerrero("E", 500, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(asesino, objetivo, 1);
+
+        Assert.Equal(59, turno.Danio);
+        Assert.Equal(5, asesino.Energia);
+        Assert.Equal("Puñalada Letal", turno.NombreAccion);
+    }
+
+    [Fact]
+    public void Asesino_SinEnergiaParaHabilidad_DevuelveCeroDanio()
+    {
+        var asesino  = new Asesino("As", 90, 20, 5, energiaInicial: 14);
+        var objetivo = new Guerrero("E", 100, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(asesino, objetivo, 1);
+
+        Assert.Equal(0, turno.Danio);
+        Assert.Equal(14, asesino.Energia);
+    }
+
+    [Fact]
+    public void Asesino_EsquivaSoloUnGolpe_ElSegundoLoDania()
+    {
+        var asesino = new Asesino("As", 90, 20, 5, energiaInicial: 0);
+        var dummy   = new Guerrero("D", 100, 5, 2, 0);
+
+        ConEstrategia(new EstrategiaDefender()).EjecutarTurno(asesino, dummy, 1);
+
+        Assert.Equal(0, asesino.RecibirDanio(50));  // esquivado
+        Assert.Equal(45, asesino.RecibirDanio(50)); // 50 - 5: ya no esquiva
+        Assert.Equal(45, asesino.Vida);
+    }
+
+    [Fact]
+    public void Asesino_Esquivando_ElTurnoDelAtacanteRegistraCeroDanio()
+    {
+        var asesino  = new Asesino("As", 90, 20, 5, energiaInicial: 0);
+        var atacante = new Guerrero("G", 100, 50, 5, furiaInicial: 0);
+
+        ConEstrategia(new EstrategiaDefender()).EjecutarTurno(asesino, atacante, 1);
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(atacante, asesino, 1);
+
+        Assert.Equal(0, turno.Danio);
+        Assert.Equal(90, asesino.Vida);
+    }
+
+    // ── Reglas generales (casos adicionales) ─────────────────────────────────
+
+    [Theory]
+    [InlineData("Guerrero", "Golpe Devastador")]
+    [InlineData("Mago",     "Bola de Fuego")]
+    [InlineData("Arquero",  "Lluvia de Flechas")]
+    [InlineData("Asesino",  "Puñalada Letal")]
+    public void Habilidad_NombreAccion_CorrespondeALaClase(string clase, string nombreEsperado)
+    {
+        var actor    = FabricaPersonajes.Crear(clase, "X", 100, 20, 5, 50);
+        var objetivo = new Guerrero("E", 500, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(actor, objetivo, 1);
+
+        Assert.Equal(nombreEsperado, turno.NombreAccion);
+        Assert.True(turno.Danio > 0);
+    }
+
+    [Theory]
+    [InlineData("Guerrero")]
+    [InlineData("Mago")]
+    [InlineData("Arquero")]
+    [InlineData("Asesino")]
+    public void Defender_NuncaHaceDanio_EnNingunaClase(string clase)
+    {
+        var actor    = FabricaPersonajes.Crear(clase, "X", 100, 20, 5, 50);
+        var objetivo = new Guerrero("E", 100, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaDefender()).EjecutarTurno(actor, objetivo, 1);
+
+        Assert.Equal(0, turno.Danio);
+        Assert.Equal(100, objetivo.Vida);
+        Assert.Equal("Defensa", turno.NombreAccion);
+    }
+
+    [Fact]
+    public void DefensaMayorAlAtaque_SiempreHaceAlMenosUnoDeDanio()
+    {
+        var atacante = new Guerrero("G", 100, 5, 5, 0);
+        var tanque   = new Guerrero("T", 100, 5, 999, 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(atacante, tanque, 1);
+
+        Assert.Equal(1, turno.Danio);
+        Assert.Equal(99, tanque.Vida);
+    }
+
+    [Fact]
+    public void Turno_RegistraNumeroNombresYEstadoDeAmbos()
+    {
+        var actor    = new Guerrero("Actor", 100, 20, 5, 0);
+        var objetivo = new Guerrero("Objetivo", 100, 5, 2, 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(actor, objetivo, 7);
+
+        Assert.Equal(7, turno.Numero);
+        Assert.Equal("Actor", turno.NombreActor);
+        Assert.Equal("Objetivo", turno.NombreObjetivo);
+        Assert.True(turno.ActorVivo);
+        Assert.True(turno.ObjetivoVivo);
+    }
+
+    [Fact]
+    public void Turno_QueMataAlObjetivo_RegistraObjetivoMuerto()
+    {
+        var actor    = new Guerrero("Actor", 100, 50, 5, 0);
+        var objetivo = new Guerrero("Objetivo", 10, 5, 1, 0);
+
+        var turno = ConEstrategia(new EstrategiaAtacar()).EjecutarTurno(actor, objetivo, 1);
+
+        Assert.True(turno.ActorVivo);
+        Assert.False(turno.ObjetivoVivo);
+        Assert.Equal(10, turno.Danio); // solo se aplica la vida que quedaba
+    }
+
+    [Fact]
+    public void PersonajeDerrotado_NoPuedeDefender_LanzaExcepcion()
+    {
+        var muerto   = new Mago("M", 100, 20, 5, 0);
+        var objetivo = new Guerrero("E", 100, 20, 5, 0);
+        muerto.RecibirDanio(999);
+
+        Assert.Throws<InvalidOperationException>(
+            () => ConEstrategia(new EstrategiaDefender()).EjecutarTurno(muerto, objetivo, 1));
+    }
+
+    [Fact]
+    public void PersonajeDerrotado_NoPuedeUsarHabilidad_LanzaExcepcion()
+    {
+        var muerto   = new Arquero("A", 100, 20, 5, 10);
+        var objetivo = new Guerrero("E", 100, 20, 5, 0);
+        muerto.RecibirDanio(999);
+
+        Assert.Throws<InvalidOperationException>(
+            () => ConEstrategia(new EstrategiaHabilidad()).EjecutarTurno(muerto, objetivo, 1));
+    }
+
+    [Fact]
+    public void ServicioCombate_SinEstrategia_LanzaExcepcion()
+    {
+        Assert.Throws<ArgumentNullException>(() => new ServicioCombate(null!));
+    }
 }
