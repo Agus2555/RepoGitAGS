@@ -21,7 +21,6 @@ public class ServicioCombateResolucionTests
         public TipoAccion ElegirAccion(Personaje actor, Personaje objetivo) => TipoAccion.Defender;
     }
 
-    // Permite asignar una acción fija distinta a cada personaje (por nombre).
     private class EstrategiaPorActor(Dictionary<string, TipoAccion> acciones) : IEstrategiaTurno
     {
         public TipoAccion ElegirAccion(Personaje actor, Personaje objetivo) => acciones[actor.Nombre];
@@ -32,8 +31,8 @@ public class ServicioCombateResolucionTests
     [Fact]
     public void Combatir_TerminaConGanador_CuandoUnPersonajeMuere()
     {
-        var fuerte = new Guerrero("Fuerte", 100, 50, 2, 0); // ataque alto
-        var debil  = new Guerrero("Débil",   10,  5, 1, 0); // poca vida
+        var fuerte = new Guerrero("Fuerte", 100, 50, 2, 0);
+        var debil  = new Guerrero("Débil",   10,  5, 1, 0);
 
         var resultado = CrearServicio().Combatir(fuerte, debil);
 
@@ -45,8 +44,8 @@ public class ServicioCombateResolucionTests
     [Fact]
     public void Combatir_GanadorEsElQueQuedaVivo()
     {
-        var p1 = new Mago("Mago",     50, 10, 2, 0);   // poca vida
-        var p2 = new Guerrero("G", 200, 50, 1, 0);     // ataque alto
+        var p1 = new Mago("Mago",     50, 10, 2, 0);
+        var p2 = new Guerrero("G", 200, 50, 1, 0);
 
         var resultado = CrearServicio().Combatir(p1, p2);
 
@@ -57,14 +56,13 @@ public class ServicioCombateResolucionTests
     [Fact]
     public void Combatir_TerminaEnEmpate_CuandoSeAlcanzaMaxTurnos()
     {
-        // Defensa tan alta que nadie puede matar al otro en 3 turnos.
         var p1 = new Guerrero("T1", 10_000, 1, 999, 0);
         var p2 = new Guerrero("T2", 10_000, 1, 999, 0);
 
         var resultado = CrearServicio().Combatir(p1, p2, maxTurnos: 3);
 
-        Assert.Null(resultado.Ganador);           // empate
-        Assert.Equal(3, resultado.TurnosJugados); // se consumieron los 3 turnos
+        Assert.Null(resultado.Ganador);
+        Assert.Equal(3, resultado.TurnosJugados);
     }
 
     [Fact]
@@ -123,14 +121,13 @@ public class ServicioCombateResolucionTests
 
         Assert.Same(p1, resultado.Ganador);
         Assert.Single(resultado.Turnos);
-        Assert.Equal(100, p1.Vida); // no recibió daño
+        Assert.Equal(100, p1.Vida);
         Assert.False(resultado.Turnos[0].ObjetivoVivo);
     }
 
     [Fact]
     public void Combatir_P2Gana_CuandoP1EsElDebil()
     {
-        // Inverso del caso anterior: el débil ataca primero, pero no alcanza.
         var p1 = new Guerrero("Débil",   10,  5, 1, 0);
         var p2 = new Guerrero("Fuerte", 100, 50, 2, 0);
 
@@ -138,7 +135,7 @@ public class ServicioCombateResolucionTests
 
         Assert.Same(p2, resultado.Ganador);
         Assert.False(p1.EstaVivo);
-        Assert.Equal(97, p2.Vida);             // recibió un golpe de 5 - 2
+        Assert.Equal(97, p2.Vida);              // recibió un golpe de 5 - 2 = 3
         Assert.Equal(2, resultado.Turnos.Count);
         Assert.Equal("Fuerte", resultado.Turnos[^1].NombreActor);
     }
@@ -162,18 +159,22 @@ public class ServicioCombateResolucionTests
         var a = new Guerrero("A", 30, 20, 5, 0);
         var b = new Guerrero("B", 30, 20, 5, 0);
 
-        var resultado = CrearServicio().Combatir(b, a); // ahora B ataca primero
+        var resultado = CrearServicio().Combatir(b, a);
 
         Assert.Same(b, resultado.Ganador);
         Assert.False(a.EstaVivo);
     }
 
+    // P1 con stats enormes gana contra P2 débil; cubre distintas combinaciones de clases
     [Theory]
     [InlineData("Guerrero", "Mago")]
     [InlineData("Mago",     "Arquero")]
     [InlineData("Arquero",  "Asesino")]
     [InlineData("Asesino",  "Guerrero")]
     [InlineData("Mago",     "Mago")]
+    [InlineData("Guerrero", "Guerrero")]  // mismo tipo, ventaja de stats
+    [InlineData("Arquero",  "Mago")]
+    [InlineData("Asesino",  "Asesino")]
     public void Combatir_P1MuchoMasFuerte_GanaP1(string claseP1, string claseP2)
     {
         var p1 = FabricaPersonajes.Crear(claseP1, "P1", 1000, 200, 50, 0);
@@ -186,12 +187,16 @@ public class ServicioCombateResolucionTests
         Assert.False(p2.EstaVivo);
     }
 
+    // P2 con stats enormes gana contra P1 débil; cubre distintas combinaciones de clases
     [Theory]
     [InlineData("Guerrero", "Mago")]
     [InlineData("Mago",     "Arquero")]
     [InlineData("Arquero",  "Asesino")]
     [InlineData("Asesino",  "Guerrero")]
     [InlineData("Mago",     "Mago")]
+    [InlineData("Guerrero", "Guerrero")]
+    [InlineData("Arquero",  "Mago")]
+    [InlineData("Asesino",  "Asesino")]
     public void Combatir_P2MuchoMasFuerte_GanaP2(string claseP1, string claseP2)
     {
         var p1 = FabricaPersonajes.Crear(claseP1, "P1",   50,  10,  1, 0);
@@ -213,7 +218,7 @@ public class ServicioCombateResolucionTests
         var resultado = CrearServicio().Combatir(p1, p2);
 
         Assert.NotNull(resultado.Ganador);
-        var perdedor = resultado.Ganador == p1 ? p2 : p1;
+        Personaje perdedor = resultado.Ganador == p1 ? p2 : (Personaje)p1;
         Assert.True(resultado.Ganador.Vida > 0);
         Assert.Equal(0, perdedor.Vida);
     }
@@ -221,16 +226,14 @@ public class ServicioCombateResolucionTests
     [Fact]
     public void Combatir_LaEstrategiaPuedeCambiarAlGanador()
     {
-        // Mismo enfrentamiento: con ataque básico el Mago pierde,
-        // con Bola de Fuego gana.
         Personaje NuevoMago()     => new Mago("Mago", 50, 20, 1, 30);
         Personaje NuevoGuerrero() => new Guerrero("Guerrero", 60, 20, 2, 0);
 
-        var mago1 = NuevoMago();
+        var mago1     = NuevoMago();
         var guerrero1 = NuevoGuerrero();
         var conAtaque = new ServicioCombate(new EstrategiaAtacar()).Combatir(mago1, guerrero1);
 
-        var mago2 = NuevoMago();
+        var mago2     = NuevoMago();
         var guerrero2 = NuevoGuerrero();
         var conHabilidad = new ServicioCombate(new EstrategiaPorActor(new()
         {
@@ -287,6 +290,24 @@ public class ServicioCombateResolucionTests
         Assert.Equal(100, p2.Vida);
     }
 
+    // Empate con distintos maxTurnos: verifica turnos jugados y total de acciones registradas
+    [Theory]
+    [InlineData(1, 1,  2)]
+    [InlineData(3, 3,  6)]
+    [InlineData(5, 5, 10)]
+    public void Combatir_Empate_ConDistintosMaxTurnos_RegistraCorrectamente(
+        int maxTurnos, int turnosJugadosEsperados, int totalAccionesEsperadas)
+    {
+        var p1 = new Guerrero("T1", 10_000, 1, 999, 0);
+        var p2 = new Guerrero("T2", 10_000, 1, 999, 0);
+
+        var resultado = CrearServicio().Combatir(p1, p2, maxTurnos: maxTurnos);
+
+        Assert.Null(resultado.Ganador);
+        Assert.Equal(turnosJugadosEsperados, resultado.TurnosJugados);
+        Assert.Equal(totalAccionesEsperadas, resultado.Turnos.Count);
+    }
+
     [Fact]
     public void Combatir_Empate_SiAmbosSoloDefienden()
     {
@@ -299,13 +320,12 @@ public class ServicioCombateResolucionTests
         Assert.All(resultado.Turnos, t => Assert.Equal(0, t.Danio));
         Assert.Equal(100, p1.Vida);
         Assert.Equal(100, p2.Vida);
-        Assert.Equal(50, ((Guerrero)p1).Furia); // 10 turnos × 5
+        Assert.Equal(50, ((Guerrero)p1).Furia);  // 10 turnos × 5
     }
 
     [Fact]
     public void Combatir_Empate_AsesinoQueSiempreEsquivaNoRecibeDanio()
     {
-        // El Asesino (P1) defiende antes de cada ataque del Guerrero: esquiva todos.
         var asesino  = new Asesino("As", 100, 20, 5, 0);
         var guerrero = new Guerrero("G", 100, 80, 5, 0);
         var servicio = new ServicioCombate(new EstrategiaPorActor(new()
@@ -324,7 +344,6 @@ public class ServicioCombateResolucionTests
     [Fact]
     public void Combatir_SiAsesinoNoDefiende_PierdeContraElMismoGuerrero()
     {
-        // Contraparte del test anterior: sin esquiva, el Guerrero gana.
         var asesino  = new Asesino("As", 100, 20, 5, 0);
         var guerrero = new Guerrero("G", 100, 80, 5, 0);
 
@@ -368,7 +387,6 @@ public class ServicioCombateResolucionTests
 
         var resultado = CrearServicio().Combatir(p1, p2, maxTurnos: 50);
 
-        // Solo el último turno puede tener al objetivo muerto.
         Assert.All(resultado.Turnos.Take(resultado.Turnos.Count - 1), t => Assert.True(t.ObjetivoVivo));
         Assert.False(resultado.Turnos[^1].ObjetivoVivo);
     }
