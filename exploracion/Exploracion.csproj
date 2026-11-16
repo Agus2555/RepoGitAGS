@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Pruebas de concepto de la etapa de Indagación (Actividades 1 y 2).
+       Es independiente del proyecto final: no usa MySQL ni la solución de src/. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- configuracion/ es otro proyecto (Actividad 3), no se compila acá. -->
+    <Compile Remove="configuracion/**" />
+    <Content Remove="configuracion/**" />
+    <None Remove="configuracion/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="11.0.1" />
+  </ItemGroup>
+
+</Project>
