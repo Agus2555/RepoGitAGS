@@ -1,184 +1,116 @@
-using Aplicacion.Dtos;
-using Aplicacion.Excepciones;
 using Aplicacion.Interfaces;
 using Aplicacion.Servicios;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Persistencia;
+using Persistencia.Entidades;
 using Persistencia.Repositorios;
 
+// ── 1. Inicialización del Web Application Builder ───────────────────────────
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Conexiones ──────────────────────────────────────────────────────────────
-// Se leen de variables de entorno (ConnectionStrings__Invitado y ConnectionStrings__Administrador),
-// así las contraseñas nunca quedan escritas en el repositorio. Ver README.
-string? conexionInvitado = builder.Configuration.GetConnectionString("Invitado");
-string? conexionAdministrador = builder.Configuration.GetConnectionString("Administrador");
+// Reutilizamos tu configuración de las cadenas de conexión desde appsettings.json
+string desarrolloCs = builder.Configuration.GetConnectionString("Desarrollo")
+    ?? throw new InvalidOperationException("Falta ConnectionStrings:Desarrollo en appsettings.json.");
+string adminCs = builder.Configuration.GetConnectionString("Administrador")
+    ?? throw new InvalidOperationException("Falta ConnectionStrings:Administrador en appsettings.json.");
 
-if (string.IsNullOrWhiteSpace(conexionInvitado) || string.IsNullOrWhiteSpace(conexionAdministrador))
-    throw new InvalidOperationException(
-        "Faltan las variables de entorno ConnectionStrings__Invitado y/o ConnectionStrings__Administrador (ver README).");
+// ── 2. Contenedor de DI (Inyección de Dependencias) ─────────────────────────
+// Infraestructura
+builder.Services.AddSingleton<IDbConnectionFactory>(_ => new MySqlConnectionFactory(desarrolloCs, adminCs));
 
-// ── Inyección de dependencias ───────────────────────────────────────────────
-// Singleton: las cadenas de conexión no cambian, alcanza con una fábrica para toda la app.
-builder.Services.AddSingleton<IDbConnectionFactory>(new MySqlConnectionFactory(conexionInvitado, conexionAdministrador));
-
-// Scoped: una instancia nueva por cada solicitud HTTP.
+// Repositorios
 builder.Services.AddScoped<IPersonajeRepository, PersonajeRepository>();
-builder.Services.AddScoped<ICombateRepository, CombateRepository>();
-builder.Services.AddScoped<ITurnoRepository, TurnoRepository>();
-builder.Services.AddScoped<IServicioPersonajes, ServicioPersonajes>();
-builder.Services.AddScoped<IServicioCombates, ServicioCombates>();
-builder.Services.AddScoped<IServicioTurnos, ServicioTurnos>();
+builder.Services.AddScoped<IBatallaRepository,   BatallaRepository>();
+builder.Services.AddScoped<IAdministracionRepository, AdministracionRepository>();
 
-// ── Swagger ─────────────────────────────────────────────────────────────────
-builder.Services.AddEndpointsApiExplorer();   // hace que Swagger "vea" las rutas de Minimal API
-builder.Services.AddSwaggerGen(opciones =>    // genera el documento OpenAPI (swagger.json)
-    opciones.SwaggerDoc("v1", new() { Title = "Combate por API", Version = "v1" }));
+// Servicios de aplicación
+builder.Services.AddScoped<IEstrategiaTurno,   EstrategiaTurnoPorDefecto>();
+builder.Services.AddScoped<IServicioCombate,   ServicioCombate>();
+builder.Services.AddScoped<IServicioPersonajes, ServicioPersonajes>();
+builder.Services.AddScoped<IServicioBatallas,  ServicioBatallas>();
+
+// Configuración requerida para que funcione Swagger / OpenAPI
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-app.UseSwagger();     // publica /swagger/v1/swagger.json
-app.UseSwaggerUI();   // publica la interfaz en /swagger
-
-// ── Manejo de errores ───────────────────────────────────────────────────────
-// Los servicios lanzan excepciones propias y acá se traducen al código HTTP.
-app.Use(async (contexto, siguiente) =>
+// ── 3. Configuración del Pipeline HTTP (Middlewares) ────────────────────────
+if (app.Environment.IsDevelopment())
 {
-    try
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+
+// ── 4. Verificación de Inicialización de Base de Datos ──────────────────────
+// Mantenemos tu chequeo de consola inicial usando un Scope temporal
+using (var scope = app.Services.CreateScope())
+{
+    var adminRepo = scope.ServiceProvider.GetRequiredService<IAdministracionRepository>();
+    bool bdExiste = await adminRepo.VerificarBaseDatosExisteAsync("simulador_combate");
+    Console.WriteLine($"Base de datos 'simulador_combate': {(bdExiste ? "OK" : "NO ENCONTRADA")}");
+    
+    if (!bdExiste)
     {
-        await siguiente(contexto);
+        Console.WriteLine("ALERTA: Ejecute DDL.SQL → SP.SQL → ESTADISTICAS.SQL → USUARIOS.SQL en MariaDB.");
     }
-    catch (DatosInvalidosException ex)  { await ResponderError(contexto, 400, ex.Message); }
-    catch (BadHttpRequestException)     { await ResponderError(contexto, 400, "El cuerpo de la solicitud no es un JSON válido."); }
-    catch (NoEncontradoException ex)    { await ResponderError(contexto, 404, ex.Message); }
-    catch (ConflictoException ex)       { await ResponderError(contexto, 409, ex.Message); }
+}
+
+// ── 5. Endpoints de la Minimal API (Pruebas de Concepto) ────────────────────
+
+// ENDPOINT 1: GET - Devuelve un objeto fijo independiente (Responde 200 OK)
+app.MapGet("/api/poc/personaje-fijo", () =>
+{
+    var personajeFijo = new PersonajeFijoDto("Aragorn Fijo", "Guerrero", 100);
+    return TypedResults.Ok(personajeFijo);
+})
+.WithName("ObtenerPersonajeFijo")
+.WithOpenApi(op => new(op) 
+{ 
+    Summary = "PoC independiente: Obtiene un personaje estático (GET)",
+    Description = "Devuelve un objeto de datos fijos para probar el mapeo y visualización en Swagger sin afectar la base de datos."
 });
 
-// ── Personajes ──────────────────────────────────────────────────────────────
-var personajes = app.MapGroup("/api/personajes").WithTags("Personajes");
 
-personajes.MapGet("", async (IServicioPersonajes servicio) =>
-        Results.Ok(await servicio.ListarAsync()))
-    .WithSummary("Lista todos los personajes")
-    .Produces<IEnumerable<PersonajeDto>>(200);
-
-personajes.MapGet("/{id:int}", async (int id, IServicioPersonajes servicio) =>
-        Results.Ok(await servicio.ObtenerAsync(id)))
-    .WithSummary("Obtiene un personaje")
-    .Produces<PersonajeDto>(200)
-    .Produces<ErrorDto>(404);
-
-personajes.MapGet("/{id:int}/combates", async (int id, IServicioCombates servicio) =>
-        Results.Ok(await servicio.ListarPorPersonajeAsync(id)))
-    .WithSummary("Combates en los que participó el personaje (lista vacía si no participó)")
-    .Produces<IEnumerable<CombateResumenDto>>(200)
-    .Produces<ErrorDto>(404);
-
-personajes.MapPost("", async (CrearPersonajeDto dto, IServicioPersonajes servicio) =>
+// ENDPOINT 2: POST - Simula una acción aplicando POLIMORFISMO directo desde el Cuerpo (Body)
+app.MapPost("/api/poc/personaje-accion", (PersonajeFijoDto body) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Nombre) || string.IsNullOrWhiteSpace(body.Clase))
     {
-        var creado = await servicio.CrearAsync(dto);
-        return Results.Created($"/api/personajes/{creado.Id}", creado);
-    })
-    .WithSummary("Crea un personaje con nombre y tipo (Guerrero, Mago, Arquero o Asesino)")
-    .Produces<PersonajeDto>(201)
-    .Produces<ErrorDto>(400);
+        return TypedResults.BadRequest("El nombre y la clase son requeridos en el cuerpo (Body).");
+    }
 
-personajes.MapPut("/{id:int}", async (int id, ActualizarPersonajeDto dto, IServicioPersonajes servicio) =>
-        Results.Ok(await servicio.ActualizarNombreAsync(id, dto)))
-    .WithSummary("Cambia el nombre del personaje")
-    .Produces<PersonajeDto>(200)
-    .Produces<ErrorDto>(400)
-    .Produces<ErrorDto>(404);
-
-personajes.MapDelete("/{id:int}", async (int id, IServicioPersonajes servicio) =>
+    // Instanciación polimórfica conceptual según la clase enviada
+    string mensajeResultado = body.Clase.ToLower() switch
     {
-        await servicio.EliminarAsync(id);
-        return Results.NoContent();
-    })
-    .WithSummary("Elimina un personaje que no participó en combates")
-    .Produces(204)
-    .Produces<ErrorDto>(404)
-    .Produces<ErrorDto>(409);
+        "guerrero" => $"{body.Nombre} blandió su espada y realizó un Ataque Torbellino. ⚔️",
+        "mago"     => $"{body.Nombre} canalizó su maná y lanzó una Bola de Fuego. 🔮",
+        "arquero"  => $"{body.Nombre} tensó su arco y disparó una Flecha Certera. 🏹",
+        "asesino"  => $"{body.Nombre} se ocultó en las sombras y ejecutó una Puñalada. 🗡️",
+        _          => null
+    };
 
-// ── Combates ────────────────────────────────────────────────────────────────
-var combates = app.MapGroup("/api/combates").WithTags("Combates");
-
-combates.MapGet("", async (IServicioCombates servicio) =>
-        Results.Ok(await servicio.ListarAsync()))
-    .WithSummary("Lista los combates con sus participantes y estado")
-    .Produces<IEnumerable<CombateResumenDto>>(200);
-
-combates.MapPost("", async (ParticipantesDto dto, IServicioCombates servicio) =>
+    if (mensajeResultado == null)
     {
-        var creado = await servicio.CrearAsync(dto);
-        return Results.Created($"/api/combates/{creado.Id}", creado);
-    })
-    .WithSummary("Inicia un combate entre dos personajes distintos")
-    .Produces<CombateDetalleDto>(201)
-    .Produces<ErrorDto>(400)
-    .Produces<ErrorDto>(404);
+        return TypedResults.BadRequest($"La clase '{body.Clase}' no es válida en esta PoC.");
+    }
 
-combates.MapGet("/{id:int}", async (int id, IServicioCombates servicio) =>
-        Results.Ok(await servicio.ObtenerAsync(id)))
-    .WithSummary("Combate con participantes, turnos y resultado")
-    .Produces<CombateDetalleDto>(200)
-    .Produces<ErrorDto>(404);
+    return TypedResults.Ok(new ResultadoAccionDto(mensajeResultado));
+})
+.WithName("EjecutarAccionPoC")
+.WithOpenApi(op => new(op) 
+{ 
+    Summary = "PoC independiente: Compara acciones de clases mediante el cuerpo (POST)" 
+});
 
-combates.MapPut("/{id:int}", async (int id, ParticipantesDto dto, IServicioCombates servicio) =>
-        Results.Ok(await servicio.ActualizarParticipantesAsync(id, dto)))
-    .WithSummary("Cambia los dos participantes (solo antes del primer turno)")
-    .Produces<CombateDetalleDto>(200)
-    .Produces<ErrorDto>(400)
-    .Produces<ErrorDto>(404)
-    .Produces<ErrorDto>(409);
-
-combates.MapDelete("/{id:int}", async (int id, IServicioCombates servicio) =>
-    {
-        await servicio.EliminarAsync(id);
-        return Results.NoContent();
-    })
-    .WithSummary("Elimina un combate sin turnos")
-    .Produces(204)
-    .Produces<ErrorDto>(404)
-    .Produces<ErrorDto>(409);
-
-// ── Turnos ──────────────────────────────────────────────────────────────────
-var turnos = app.MapGroup("/api/combates/{id:int}/turnos").WithTags("Turnos");
-
-turnos.MapGet("", async (int id, IServicioTurnos servicio) =>
-        Results.Ok(await servicio.ListarAsync(id)))
-    .WithSummary("Turnos del combate en orden de ejecución")
-    .Produces<IEnumerable<TurnoDto>>(200)
-    .Produces<ErrorDto>(404);
-
-turnos.MapPost("", async (int id, EjecutarTurnoDto dto, IServicioTurnos servicio) =>
-        Results.Ok(await servicio.EjecutarAsync(id, dto)))
-    .WithSummary("Ejecuta un turno: atacanteId y accion ('atacar' o 'habilidad')")
-    .Produces<ResultadoTurnoDto>(200)
-    .Produces<ErrorDto>(400)
-    .Produces<ErrorDto>(404);
-
-turnos.MapPut("/{turnoId:int}", async (int id, int turnoId, NotaDto dto, IServicioTurnos servicio) =>
-        Results.Ok(await servicio.ActualizarNotaAsync(id, turnoId, dto)))
-    .WithSummary("Modifica solo la nota del turno")
-    .Produces<TurnoDto>(200)
-    .Produces<ErrorDto>(400)
-    .Produces<ErrorDto>(404);
-
-turnos.MapDelete("/{turnoId:int}", async (int id, int turnoId, IServicioTurnos servicio) =>
-    {
-        await servicio.EliminarUltimoAsync(id, turnoId);
-        return Results.NoContent();
-    })
-    .WithSummary("Borra el último turno y restaura el estado previo del combate")
-    .Produces(204)
-    .Produces<ErrorDto>(404)
-    .Produces<ErrorDto>(409);
-
+// ── 6. Ejecución del Servidor Web ───────────────────────────────────────────
 app.Run();
 
-// Escribe el cuerpo de error { "mensaje": "..." } con el código indicado.
-static async Task ResponderError(HttpContext contexto, int codigo, string mensaje)
-{
-    contexto.Response.StatusCode = codigo;
-    await contexto.Response.WriteAsJsonAsync(new ErrorDto(mensaje));
-}
+// ── 7. Data Transfer Objects (DTOs) necesarios para la API ──────────────────
+// Colocados al final del archivo para mantener limpio el flujo principal de la API
+public record PersonajeFijoDto(string Nombre, string Clase, int Vida);
+public record ResultadoAccionDto(string Mensaje);
