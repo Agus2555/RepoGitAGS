@@ -5,23 +5,23 @@ namespace Persistencia;
 
 public class MySqlConnectionFactory : IDbConnectionFactory
 {
-    private readonly string _desarrolloCs;
-    private readonly string _adminCs;
+    private readonly string _invitadoCs;
+    private readonly string _administradorCs;
 
-    public MySqlConnectionFactory(string desarrolloConnectionString, string adminConnectionString)
+    public MySqlConnectionFactory(string invitadoConnectionString, string administradorConnectionString)
     {
-        if (string.IsNullOrWhiteSpace(desarrolloConnectionString))
-            throw new ArgumentNullException(nameof(desarrolloConnectionString));
-        if (string.IsNullOrWhiteSpace(adminConnectionString))
-            throw new ArgumentNullException(nameof(adminConnectionString));
+        if (string.IsNullOrWhiteSpace(invitadoConnectionString))
+            throw new ArgumentNullException(nameof(invitadoConnectionString));
+        if (string.IsNullOrWhiteSpace(administradorConnectionString))
+            throw new ArgumentNullException(nameof(administradorConnectionString));
 
-        _desarrolloCs = desarrolloConnectionString;
-        _adminCs = adminConnectionString;
+        _invitadoCs = invitadoConnectionString;
+        _administradorCs = administradorConnectionString;
     }
 
-    // Repositorios de negocio: usuario restringido a simulador_combate.
-    public IDbConnection CrearConexionDesarrollo() => new MySqlConnection(_desarrolloCs);
+    // Lecturas: usuario invitado (solo SELECT).
+    public IDbConnection CrearConexionInvitado() => new MySqlConnection(_invitadoCs);
 
-    // Solo AdministracionRepository: usuario con acceso global (information_schema, etc.).
-    public IDbConnection CrearConexionAdministrador() => new MySqlConnection(_adminCs);
+    // Escrituras: usuario administrador.
+    public IDbConnection CrearConexionAdministrador() => new MySqlConnection(_administradorCs);
 }

@@ -7,7 +7,11 @@ namespace Persistencia.Entidades
         public int Flechas { get; private set; }
 
         public override int Recurso => Flechas;
+        public override string NombreRecurso => "Flechas";
         public override string NombreHabilidad => "Lluvia de Flechas";
+
+        // Estadísticas por defecto: es lo que se usa cuando la API crea un Arquero solo con nombre y tipo.
+        public Arquero(string nombre) : this(nombre, 100, 16, 6, 10) { }
 
         public Arquero(string nombre, int vidaInicial, int ataque, int defensa, int flechasIniciales)
             : base(nombre, vidaInicial, ataque, defensa)
@@ -32,14 +36,6 @@ namespace Persistencia.Entidades
             }
         }
 
-        // Defender recupera 1 flecha: el arquero busca proyectiles del suelo.
-        public override int Defender()
-        {
-            ValidarEstado();
-            Flechas++;
-            return 0;
-        }
-
         // Habilidad: Lluvia de Flechas. Consume 3 flechas, daño doble.
         public override int UsarHabilidad(Personaje objetivo)
         {
@@ -51,5 +47,7 @@ namespace Persistencia.Entidades
             Flechas -= 3;
             return objetivo.RecibirDanio(Ataque * 2);
         }
+
+        protected override void AsignarRecurso(int valor) => Flechas = valor;
     }
 }

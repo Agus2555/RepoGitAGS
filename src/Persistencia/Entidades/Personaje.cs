@@ -4,6 +4,8 @@ namespace Persistencia.Entidades
 {
     public abstract class Personaje
     {
+        public const int LargoMaximoNombre = 50;
+
         // Id es internal set para que solo los repositorios (mismo assembly) lo asignen al leer la BD.
         public int Id { get; internal set; }
         public string Nombre { get; private set; }
@@ -14,20 +16,23 @@ namespace Persistencia.Entidades
 
         public bool EstaVivo => Vida > 0;
 
+        // Nombre de la clase concreta ("Guerrero", "Mago"...). Es lo que se guarda en la columna Tipo.
+        public string Tipo => GetType().Name;
+
         // Recurso específico de cada clase (Furia, Maná, Flechas, Energía).
         // abstract obliga a cada subclase a exponerlo con su nombre propio.
         public abstract int Recurso { get; }
+        public abstract string NombreRecurso { get; }
 
-        // Nombre de la habilidad especial, para mostrar en el historial de turnos.
-        public virtual string NombreHabilidad => "Sin Habilidad";
+        // Nombre de la habilidad especial, para mostrarlo en las respuestas de la API.
+        public abstract string NombreHabilidad { get; }
 
         protected Personaje(string nombre, int vidaInicial, int ataque, int defensa)
         {
-            if (string.IsNullOrWhiteSpace(nombre)) throw new ArgumentException("El nombre no puede estar vacío.");
             if (vidaInicial <= 0) throw new ArgumentException("La vida inicial debe ser mayor a cero.");
             if (ataque <= 0 || defensa <= 0) throw new ArgumentException("El ataque y la defensa deben ser mayores a cero.");
 
-            Nombre = nombre;
+            Nombre = ValidarNombre(nombre);
             Vida = vidaInicial;
             VidaMaxima = vidaInicial;
             Ataque = ataque;
@@ -37,29 +42,33 @@ namespace Persistencia.Entidades
         // Solo los repositorios (Persistencia) deben poder asignar el Id luego del INSERT.
         internal void AsignarId(int id) => Id = id;
 
+        // Lo único que se puede modificar de un personaje desde la API (PUT).
+        public void CambiarNombre(string? nombre) => Nombre = ValidarNombre(nombre);
+
+        // Pone la vida y el recurso que el personaje tiene DENTRO de un combate.
+        // Se usa al reconstruir un combate desde la BD y al deshacer un turno.
+        internal void RestaurarEstado(int vida, int recurso)
+        {
+            if (vida < 0 || vida > VidaMaxima) throw new ArgumentException("La vida está fuera de rango.");
+            if (recurso < 0) throw new ArgumentException("El recurso no puede ser negativo.");
+
+            Vida = vida;
+            AsignarRecurso(recurso);
+        }
+
+        // Cada subclase sabe en qué propiedad guarda su recurso (Furia, Mana...).
+        protected abstract void AsignarRecurso(int valor);
+
         protected void ValidarEstado()
         {
             if (!EstaVivo)
                 throw new InvalidOperationException($"{Nombre} está derrotado y no puede realizar acciones.");
         }
 
-        // Devuelve el daño efectivamente infligido (para que ServicioCombate lo registre).
+        // Las dos acciones del turno. abstract: cada clase está obligada a tener sus propias reglas.
+        // Devuelven el daño efectivamente infligido (para registrarlo en el turno).
         public abstract int Atacar(Personaje objetivo);
-
-        // Comportamiento defensivo propio de cada clase; devuelve 0 (sin daño).
-        // virtual → cada subclase lo personaliza; si no lo hace, no pasa nada.
-        public virtual int Defender()
-        {
-            ValidarEstado();
-            return 0;
-        }
-
-        // Habilidad especial con costo de recurso; devuelve daño o 0 si no hay recurso.
-        public virtual int UsarHabilidad(Personaje objetivo)
-        {
-            ValidarEstado();
-            return 0;
-        }
+        public abstract int UsarHabilidad(Personaje objetivo);
 
         // Encapsula el daño recibido y garantiza que la vida nunca sea negativa.
         // Devuelve el daño real aplicado (lo que se resta de la vida).
@@ -76,6 +85,15 @@ namespace Persistencia.Entidades
             Vida -= danioAplicado;
 
             return danioAplicado;
+        }
+
+        private static string ValidarNombre(string? nombre)
+        {
+            if (string.IsNullOrWhiteSpace(nombre)) throw new ArgumentException("El nombre no puede estar vacío.");
+            if (nombre.Trim().Length > LargoMaximoNombre)
+                throw new ArgumentException($"El nombre no puede superar los {LargoMaximoNombre} caracteres.");
+
+            return nombre.Trim();
         }
     }
 }

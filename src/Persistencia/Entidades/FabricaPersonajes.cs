@@ -2,31 +2,26 @@ namespace Persistencia.Entidades;
 
 /// <summary>
 /// Único lugar donde se conocen las clases concretas de personaje.
-/// Los repositorios la usan al reconstruir objetos desde la BD,
-/// sin dispersar switch/if en toda la capa de acceso a datos.
+/// Se usa solo para CREAR personajes (POST de la API) o RECONSTRUIRLOS desde la BD.
+/// La ejecución del turno nunca pregunta por la clase: eso lo resuelve el polimorfismo.
 /// </summary>
 public static class FabricaPersonajes
 {
     /// <summary>
-    /// Crea la subclase correcta según tipoClase.
+    /// Crea la subclase correcta según el tipo, con las estadísticas por defecto de esa clase.
+    /// No distingue mayúsculas ("mago" y "Mago" sirven igual).
     /// Si id > 0 (lectura desde BD), lo asigna al objeto creado.
     /// </summary>
-    public static Personaje Crear(
-        string tipoClase,
-        string nombre,
-        int vidaInicial,
-        int ataque,
-        int defensa,
-        int recurso,
-        int id = 0)
+    public static Personaje Crear(string? tipo, string? nombre, int id = 0)
     {
-        Personaje personaje = tipoClase switch
+        Personaje personaje = tipo?.Trim().ToLower() switch
         {
-            "Guerrero" => new Guerrero(nombre, vidaInicial, ataque, defensa, recurso),
-            "Mago"     => new Mago(nombre, vidaInicial, ataque, defensa, recurso),
-            "Arquero"  => new Arquero(nombre, vidaInicial, ataque, defensa, recurso),
-            "Asesino"  => new Asesino(nombre, vidaInicial, ataque, defensa, recurso),
-            _          => throw new ArgumentException($"Tipo de clase no reconocido: '{tipoClase}'.")
+            "guerrero" => new Guerrero(nombre!),
+            "mago"     => new Mago(nombre!),
+            "arquero"  => new Arquero(nombre!),
+            "asesino"  => new Asesino(nombre!),
+            _          => throw new ArgumentException(
+                              $"Tipo de personaje inválido: '{tipo}'. Usá Guerrero, Mago, Arquero o Asesino.")
         };
 
         if (id > 0)

@@ -2,16 +2,17 @@ using System;
 
 namespace Persistencia.Entidades
 {
-    // El daguero: letal pero frágil. Su defensa es la esquiva, no la armadura.
+    // El daguero: letal pero frágil. Depende de su energía para los golpes críticos.
     public class Asesino : Personaje
     {
         public int Energia { get; private set; }
 
-        // Flag activo después de Defender(); se consume en el siguiente RecibirDanio.
-        private bool _esquivando = false;
-
         public override int Recurso => Energia;
+        public override string NombreRecurso => "Energía";
         public override string NombreHabilidad => "Puñalada Letal";
+
+        // Estadísticas por defecto: es lo que se usa cuando la API crea un Asesino solo con nombre y tipo.
+        public Asesino(string nombre) : this(nombre, 90, 15, 5, 30) { }
 
         public Asesino(string nombre, int vidaInicial, int ataque, int defensa, int energiaInicial)
             : base(nombre, vidaInicial, ataque, defensa)
@@ -20,6 +21,8 @@ namespace Persistencia.Entidades
             Energia = energiaInicial;
         }
 
+        // Ataque básico: con energía hace un golpe crítico (triple);
+        // sin energía golpea normal y recupera 5.
         public override int Atacar(Personaje objetivo)
         {
             ValidarEstado();
@@ -36,15 +39,8 @@ namespace Persistencia.Entidades
             }
         }
 
-        // Defender activa la esquiva para el próximo golpe recibido.
-        public override int Defender()
-        {
-            ValidarEstado();
-            _esquivando = true;
-            return 0;
-        }
-
         // Habilidad: Puñalada Letal. Consume 15 de energía, daño triple.
+        // A diferencia del ataque, si no hay energía no hace nada (devuelve 0).
         public override int UsarHabilidad(Personaje objetivo)
         {
             ValidarEstado();
@@ -56,16 +52,6 @@ namespace Persistencia.Entidades
             return objetivo.RecibirDanio(Ataque * 3);
         }
 
-        // Override de RecibirDanio: si está esquivando, anula el golpe y desactiva el flag.
-        public override int RecibirDanio(int danioRecibido)
-        {
-            if (_esquivando)
-            {
-                _esquivando = false;
-                return 0; // golpe esquivado completamente
-            }
-
-            return base.RecibirDanio(danioRecibido);
-        }
+        protected override void AsignarRecurso(int valor) => Energia = valor;
     }
 }

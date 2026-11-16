@@ -4,8 +4,8 @@ using Persistencia.Entidades;
 namespace Persistencia.Repositorios;
 
 /// <summary>
-/// Operaciones CRUD simples → se resuelven con Dapper directo, sin Stored Procedures.
-/// (La consigna reserva los SP para operaciones de complejidad media o alta.)
+/// Acceso a la tabla personajes con Dapper.
+/// Lecturas → conexión invitado. Escrituras → conexión administrador.
 /// </summary>
 public class PersonajeRepository : IPersonajeRepository
 {
@@ -16,64 +16,74 @@ public class PersonajeRepository : IPersonajeRepository
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
     }
 
-    public async Task<Personaje> RegistrarAsync(Personaje personaje)
+    // ── Lecturas (invitado) ─────────────────────────────────────────────────
+
+    public async Task<IEnumerable<Personaje>> ListarAsync()
     {
-        using var db = _factory.CrearConexionDesarrollo();
+        using var db = _factory.CrearConexionInvitado();
+
+        var filas = await db.QueryAsync<PersonajeFila>("SELECT Id, Nombre, Tipo FROM personajes ORDER BY Id");
+
+        return filas.Select(f => FabricaPersonajes.Crear(f.Tipo, f.Nombre, f.Id)).ToList();
+    }
+
+    public async Task<Personaje?> ObtenerPorIdAsync(int id)
+    {
+        using var db = _factory.CrearConexionInvitado();
+
+        var fila = await db.QueryFirstOrDefaultAsync<PersonajeFila>(
+            "SELECT Id, Nombre, Tipo FROM personajes WHERE Id = @Id",
+            new { Id = id });
+
+        return fila == null ? null : FabricaPersonajes.Crear(fila.Tipo, fila.Nombre, fila.Id);
+    }
+
+    public async Task<bool> ParticipoEnCombatesAsync(int id)
+    {
+        using var db = _factory.CrearConexionInvitado();
+
+        int cantidad = await db.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM combates WHERE Personaje1Id = @Id OR Personaje2Id = @Id",
+            new { Id = id });
+
+        return cantidad > 0;
+    }
+
+    // ── Escrituras (administrador) ──────────────────────────────────────────
+
+    public async Task<Personaje> CrearAsync(Personaje personaje)
+    {
+        using var db = _factory.CrearConexionAdministrador();
 
         int id = await db.QuerySingleAsync<int>(
-            @"INSERT INTO Personajes (Nombre, TipoClase, Vida, VidaMaxima, Ataque, Defensa, RecursoEspecial)
-              VALUES (@Nombre, @TipoClase, @Vida, @VidaMaxima, @Ataque, @Defensa, @RecursoEspecial);
+            @"INSERT INTO personajes (Nombre, Tipo) VALUES (@Nombre, @Tipo);
               SELECT LAST_INSERT_ID();",
-            new
-            {
-                Nombre        = personaje.Nombre,
-                TipoClase     = personaje.GetType().Name,
-                Vida          = personaje.Vida,
-                VidaMaxima    = personaje.VidaMaxima,
-                Ataque        = personaje.Ataque,
-                Defensa       = personaje.Defensa,
-                RecursoEspecial = personaje.Recurso
-            });
+            new { personaje.Nombre, personaje.Tipo });
 
         // AsignarId es internal: accesible desde este assembly (Persistencia).
         personaje.AsignarId(id);
         return personaje;
     }
 
-    public async Task<Personaje?> ObtenerPorIdAsync(int id)
+    public async Task ActualizarNombreAsync(int id, string nombre)
     {
-        using var db = _factory.CrearConexionDesarrollo();
+        using var db = _factory.CrearConexionAdministrador();
 
-        var fila = await db.QueryFirstOrDefaultAsync(
-            "SELECT Id, Nombre, TipoClase, Vida, VidaMaxima, Ataque, Defensa, RecursoEspecial FROM Personajes WHERE Id = @Id",
-            new { Id = id });
-
-        if (fila == null) return null;
-
-        return FabricaPersonajes.Crear(
-            (string)fila.TipoClase,
-            (string)fila.Nombre,
-            (int)fila.Vida,
-            (int)fila.Ataque,
-            (int)fila.Defensa,
-            (int)fila.RecursoEspecial,
-            (int)fila.Id);
+        await db.ExecuteAsync("UPDATE personajes SET Nombre = @Nombre WHERE Id = @Id", new { Id = id, Nombre = nombre });
     }
 
-    public async Task<IEnumerable<Personaje>> ListarAsync()
+    public async Task EliminarAsync(int id)
     {
-        using var db = _factory.CrearConexionDesarrollo();
+        using var db = _factory.CrearConexionAdministrador();
 
-        var filas = await db.QueryAsync(
-            "SELECT Id, Nombre, TipoClase, Vida, VidaMaxima, Ataque, Defensa, RecursoEspecial FROM Personajes");
+        await db.ExecuteAsync("DELETE FROM personajes WHERE Id = @Id", new { Id = id });
+    }
 
-        return filas.Select(r => FabricaPersonajes.Crear(
-            (string)r.TipoClase,
-            (string)r.Nombre,
-            (int)r.Vida,
-            (int)r.Ataque,
-            (int)r.Defensa,
-            (int)r.RecursoEspecial,
-            (int)r.Id));
+    // Forma de una fila de la tabla; Dapper llena las propiedades por nombre de columna.
+    private class PersonajeFila
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; } = "";
+        public string Tipo { get; set; } = "";
     }
 }

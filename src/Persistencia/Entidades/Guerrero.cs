@@ -7,9 +7,13 @@ namespace Persistencia.Entidades
         public int Furia { get; private set; }
 
         // Recurso expuesto con nombre propio para el dominio;
-        // Personaje.Recurso lo reutiliza para la BD (columna RecursoEspecial).
+        // Personaje.Recurso lo reutiliza para la BD y las respuestas de la API.
         public override int Recurso => Furia;
+        public override string NombreRecurso => "Furia";
         public override string NombreHabilidad => "Golpe Devastador";
+
+        // Estadísticas por defecto: es lo que se usa cuando la API crea un Guerrero solo con nombre y tipo.
+        public Guerrero(string nombre) : this(nombre, 120, 20, 8, 0) { }
 
         public Guerrero(string nombre, int vidaInicial, int ataque, int defensa, int furiaInicial)
             : base(nombre, vidaInicial, ataque, defensa)
@@ -38,14 +42,6 @@ namespace Persistencia.Entidades
             return objetivo.RecibirDanio(danio);
         }
 
-        // Defender genera furia pasivamente: cuanto más aguanta, más fuerte golpea.
-        public override int Defender()
-        {
-            ValidarEstado();
-            Furia += 5;
-            return 0;
-        }
-
         // Habilidad: Golpe Devastador. Consume 20 de furia, daño 1.5× el ataque base.
         // Si no hay furia suficiente, no hace nada (devuelve 0).
         public override int UsarHabilidad(Personaje objetivo)
@@ -59,5 +55,7 @@ namespace Persistencia.Entidades
             int danio = Ataque + Ataque / 2; // ×1.5 en enteros
             return objetivo.RecibirDanio(danio);
         }
+
+        protected override void AsignarRecurso(int valor) => Furia = valor;
     }
 }
